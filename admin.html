@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin - AL ALI STORE</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f1535;color:#f4f1ff;margin:0;padding:16px;max-width:640px;margin:auto}
+input,select,textarea,button{font:inherit;width:100%;padding:11px;margin:5px 0;border-radius:10px;border:1px solid #fff3;background:#ffffff12;color:#fff}
+select option{color:#000}button{background:#ff6b35;border:0;font-weight:700;cursor:pointer}
+.box{background:#1a1f4a;border-radius:16px;padding:14px;margin:14px 0}.it{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #fff2}
+.it img{width:48px;height:48px;border-radius:8px;object-fit:cover}.it div{flex:1;font-size:14px}.it button{width:auto;padding:6px 12px}
+</style></head><body><h2>Admin panel</h2><p id="st"></p>
+<div id="login" class="box"><input id="em" type="email" placeholder="Admin email"><input id="pw" type="password" placeholder="Password"><button id="lg">Login</button></div>
+<div id="app" hidden>
+<div class="box"><h3>Naya product</h3><input id="nm" placeholder="Product ka naam"><input id="pr" type="number" placeholder="Price (Rs)"><select id="ct"></select>
+<textarea id="ds" rows="2" placeholder="Chhoti description"></textarea><input id="im" type="file" accept="image/*"><button id="sv">Product save karein</button></div>
+<div class="box"><h3>Products</h3><div id="pl"></div></div><div class="box"><h3>Orders</h3><div id="ol"></div></div><button id="lo" style="background:#444">Logout</button></div>
+<script type="module">
+import {firebaseConfig,cloudinary,categories,demo} from './config.js';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if(demo){$('st').textContent='Pehle config.js mein Firebase details bharein.';$('login').hidden=true}
+else{
+const A=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'),F=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+const app=(await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js')).initializeApp(firebaseConfig),auth=A.getAuth(app),db=F.getFirestore(app);
+$('ct').innerHTML=categories.map(c=>`<option>${esc(c.name)}</option>`).join('');
+$('lg').onclick=()=>A.signInWithEmailAndPassword(auth,$('em').value,$('pw').value).catch(()=>$('st').textContent='Email ya password ghalat he.');
+$('lo').onclick=()=>A.signOut(auth);
+A.onAuthStateChanged(auth,u=>{$('login').hidden=!!u;$('app').hidden=!u;if(u)load()});
+async function load(){
+ const p=await F.getDocs(F.collection(db,'products'));
+ $('pl').innerHTML=p.docs.map(d=>{const x=d.data();return `<div class="it"><img src="${esc(x.image||'')}" alt=""><div>${esc(x.name)}<br>Rs.${esc(x.price)} - ${esc(x.category)}</div><button data-p="${d.id}">Delete</button></div>`}).join('')||'Abhi koi product nahi.';
+ const o=await F.getDocs(F.query(F.collection(db,'orders'),F.orderBy('at','desc')));
+ $('ol').innerHTML=o.docs.map(d=>{const x=d.data();return `<div class="it"><div><b>${esc(x.name)}</b> - ${esc(x.phone)}<br>${esc(x.address)}<br>${esc((x.items||[]).join(', '))}<br><b>Total Rs.${esc(x.total)}</b></div><button data-o="${d.id}">Done</button></div>`}).join('')||'Abhi koi order nahi.'}
+$('pl').onclick=async e=>{if(e.target.dataset.p&&confirm('Delete karein?')){await F.deleteDoc(F.doc(db,'products',e.target.dataset.p));load()}};
+$('ol').onclick=async e=>{if(e.target.dataset.o){await F.deleteDoc(F.doc(db,'orders',e.target.dataset.o));load()}};
+$('sv').onclick=async()=>{const n=$('nm').value.trim(),pr=Number($('pr').value);if(!n||!pr){$('st').textContent='Naam aur price zaroori hen.';return}
+ $('sv').disabled=true;$('st').textContent='Save ho raha he...';let image='';
+ try{const f=$('im').files[0];if(f){const fd=new FormData();fd.append('file',f);fd.append('upload_preset',cloudinary.preset);
+  const r=await fetch(`https://api.cloudinary.com/v1_1/${cloudinary.cloudName}/image/upload`,{method:'POST',body:fd});image=(await r.json()).secure_url||''}
+ await F.addDoc(F.collection(db,'products'),{name:n,price:pr,category:$('ct').value,desc:$('ds').value,image,at:Date.now()});
+ $('st').textContent='Product save ho gaya.';['nm','pr','ds','im'].forEach(i=>$(i).value='');load()}
+ catch(e){$('st').textContent='Save nahi hua. Dobara koshish karein.'}$('sv').disabled=false};
+}
+</script></body></html>
